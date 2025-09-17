@@ -2,8 +2,8 @@ using System.Security.Claims;
 using MakrisPortfolio.Server.Auth;
 using MakrisPortfolio.Server.Data;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 
 namespace MakrisPortfolio.Server.Controllers;
 
@@ -11,84 +11,117 @@ namespace MakrisPortfolio.Server.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly UserManager<AppUser> _userManager;
-    private readonly SignInManager<AppUser> _signInManager;
+    private readonly UserManager<AppUser> _users;
+    private readonly SignInManager<AppUser> _signIn;
     private readonly JwtTokenService _jwt;
+    private readonly ILogger<AuthController> _log;
 
-    public AuthController(UserManager<AppUser> userManager,
-                          SignInManager<AppUser> signInManager,
-                          JwtTokenService jwt)
+    public AuthController(
+        UserManager<AppUser> users,
+        SignInManager<AppUser> signIn,
+        JwtTokenService jwt,
+        ILogger<AuthController> log)
     {
-        _userManager = userManager;
-        _signInManager = signInManager;
-        _jwt = jwt;
+        _users = users;
+        _signIn = signIn;
+        _jwt   = jwt;
+        _log   = log;
     }
 
-    public record LoginRequest(string Email, string Password);
-    public record RegisterRequest(string Email, string Password, string? DisplayName);
-    public record AuthResponse(string Token);
-
-    [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest req)
-    {
-        var user = await _userManager.FindByEmailAsync(req.Email);
-        if (user == null) return Unauthorized();
-
-        var ok = await _userManager.CheckPasswordAsync(user, req.Password);
-        if (!ok) return Unauthorized();
-
-        return Ok(new AuthResponse(await IssueTokenAsync(user)));
-    }
-
+    // POST: /api/auth/register
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest req)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest req)
     {
+        if (!ModelState.IsValid)
+            return BadRequest(new ErrorResponse("InvalidInput", string.Join("; ",
+                ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))));
+
+        var existing = await _users.FindByEmailAsync(req.Email);
+        if (existing is not null)
+            return Conflict(new ErrorResponse("UserExists", "An account with this email already exists."));
+
         var user = new AppUser
         {
-            Email = req.Email,
-            UserName = req.Email,
-            DisplayName = req.DisplayName ?? req.Email
+            UserName    = req.Email,
+            Email       = req.Email,
+            DisplayName = string.IsNullOrWhiteSpace(req.DisplayName) ? null : req.DisplayName
         };
-        var result = await _userManager.CreateAsync(user, req.Password);
-        if (!result.Succeeded) return BadRequest(result.Errors);
 
-        // default role - regular user
-        if (!await _userManager.IsInRoleAsync(user, "User"))
-            await _userManager.AddToRoleAsync(user, "User");
+        var result = await _users.CreateAsync(user, req.Password);
+        if (!result.Succeeded)
+        {
+            var details = string.Join("; ", result.Errors.Select(e => e.Description));
+            _log.LogWarning("Registration failed for {Email}: {Details}", req.Email, details);
+            return BadRequest(new ErrorResponse("RegistrationFailed", details));
+        }
 
-        return Ok(new AuthResponse(await IssueTokenAsync(user)));
+        // Build token with current roles (likely none at first)
+        var token = await IssueJwtAsync(user);
+        return Ok(new AuthResponse(token, user.Email!, user.DisplayName));
     }
 
-    // Returns a fresh token (used by client Refresh)
+    // POST: /api/auth/login
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest req)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new ErrorResponse("InvalidInput", "Check email and password formatting."));
+
+        var user = await _users.FindByEmailAsync(req.Email);
+        if (user is null)
+            return Unauthorized(new ErrorResponse("InvalidCredentials"));
+
+        var signIn = await _signIn.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: false);
+        if (!signIn.Succeeded)
+            return Unauthorized(new ErrorResponse("InvalidCredentials"));
+
+        var token = await IssueJwtAsync(user);
+        return Ok(new AuthResponse(token, user.Email!, user.DisplayName));
+    }
+
+    // GET: /api/auth/me
     [Authorize]
     [HttpGet("me")]
-    public async Task<ActionResult<AuthResponse>> Me()
+    public IActionResult Me()
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user == null) return Unauthorized();
-        return Ok(new AuthResponse(await IssueTokenAsync(user)));
+        var email = User.FindFirstValue("email") ?? User.Identity?.Name ?? "";
+        var display = User.FindFirstValue("displayName");
+        return Ok(new { email, display, roles = User.FindAll(ClaimTypes.Role).Select(r => r.Value).ToArray() });
     }
 
-    private async Task<string> IssueTokenAsync(AppUser user)
+    // POST: /api/auth/refresh
+    [Authorize]
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return Unauthorized();
+
+        var token = await IssueJwtAsync(user);
+        return Ok(new AuthResponse(token, user.Email!, user.DisplayName));
+    }
+
+    /// <summary>Create a JWT for a user with up-to-date roles and convenience claims.</summary>
+    private async Task<string> IssueJwtAsync(AppUser user)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id),
-            new(ClaimTypes.Name, user.UserName ?? ""),
-            new(ClaimTypes.Email, user.Email ?? "")
+            new(ClaimTypes.Name,          user.UserName ?? user.Email ?? user.Id),
+            new("email",                  user.Email ?? string.Empty),
+            new("displayName",            user.DisplayName ?? user.Email ?? string.Empty)
         };
 
-        var roles = await _userManager.GetRolesAsync(user);
-        foreach (var r in roles)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, r)); // server-side [Authorize(Roles=...)]
-            claims.Add(new Claim("role", r));          // client-side AuthorizeView
-        }
+        var roles = await _users.GetRolesAsync(user);
+        foreach (var role in roles)
+            claims.Add(new Claim(ClaimTypes.Role, role));
 
-        // optional convenience claim for Premium policy
-        if (roles.Contains("Premium"))
+        if (roles.Any(r => string.Equals(r, "Premium", StringComparison.OrdinalIgnoreCase)))
             claims.Add(new Claim("HasPremium", "true"));
 
-        return _jwt.CreateToken(claims, TimeSpan.FromHours(12));
+        return _jwt.CreateToken(claims);
     }
 }

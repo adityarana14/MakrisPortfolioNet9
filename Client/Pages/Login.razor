@@ -1,13 +1,56 @@
 @page "/login"
 @inject MakrisPortfolio.Client.Services.AuthService Auth
 @inject NavigationManager Nav
-<h2>Login</h2>
-<form @onsubmit="OnSubmit">
-  <input @bind="_email" placeholder="Email" />
-  <input type="password" @bind="_password" placeholder="Password" />
-  <button class="btn">Login</button>
-</form>
-@code{
-  string _email="", _password="";
-  async Task OnSubmit(){ if(await Auth.LoginAsync(_email,_password)) Nav.NavigateTo("/"); }
+
+<h1>Log in</h1>
+
+<EditForm Model="@model" OnValidSubmit="@Submit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    @if (!string.IsNullOrEmpty(serverError))
+    {
+    <div class="card" style="border-color:#fecaca;background:#fef2f2;color:#7f1d1d;margin-bottom:.75rem">
+        <strong>Login failed:</strong>
+        <div>@serverError</div>
+    </div>
+    }
+
+    <div class="card" style="max-width:480px">
+        <div>
+            <label>Email</label>
+            <InputText class="input" @bind-Value="model.Email" />
+            <ValidationMessage For="@(() => model.Email)" />
+        </div>
+
+        <div style="margin-top:.6rem">
+            <label>Password</label>
+            <InputText class="input" type="password" @bind-Value="model.Password" />
+            <ValidationMessage For="@(() => model.Password)" />
+        </div>
+
+        <div style="display:flex;gap:.6rem;margin-top:.8rem">
+            <button class="btn primary" type="submit">Log in</button>
+            <NavLink class="btn" href="/register">Create account</NavLink>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+private LoginModel model = new();
+private string? serverError;
+
+private async Task Submit()
+{
+serverError = null;
+var (ok, message) = await Auth.LoginAsync(model.Email, model.Password);
+if (ok) Nav.NavigateTo("/");
+else serverError = message ?? "Invalid email or password.";
+}
+
+public class LoginModel
+{
+[Required, EmailAddress] public string Email { get; set; } = string.Empty;
+[Required] public string Password { get; set; } = string.Empty;
+}
 }
