@@ -1,3 +1,6 @@
+#### Link for you to try: https://cpm-markis.azurewebsites.net/
+---
+
 # MakrisPortfolioNet9
 
 A modern, fast portfolio site for **Christopher Peter Makris**, built on **.NET 9** with a hosted **Blazor WebAssembly** front end, a lightweight **ASP.NET Core** API, and a shared contracts library.
