@@ -1,0 +1,95 @@
+@page "/admin"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles="Admin")]
+@inject HttpClient Http
+@inject MakrisPortfolio.Client.Services.ResourceService ResourceSvc
+
+<h2>Admin</h2>
+
+<h3>Create resource</h3>
+<form @onsubmit="Create">
+  <input @bind="_title" placeholder="Title" />
+  <input @bind="_url" placeholder="URL (/files/... or https://...)" />
+  <label><input type="checkbox" @bind="_isPremium" /> Premium</label>
+  <button class="btn">Add</button>
+</form>
+
+<h3 style="margin-top:2rem">Grant premium by email</h3>
+<form @onsubmit="Grant">
+  <input @bind="_email" placeholder="user@example.com" />
+  <button class="btn">Grant Premium</button>
+</form>
+
+<h3 style="margin-top:2rem">Premium Requests</h3>
+<div style="display:flex;gap:.5rem;margin-bottom:.5rem">
+  <button class="btn" @onclick="Refresh">Refresh</button>
+</div>
+
+@if (_pending is null)
+{
+<p>Loading…</p>
+}
+else if (!_pending.Any())
+{
+<p>No pending requests.</p>
+}
+else
+{
+<table>
+  <thead><tr><th>Id</th><th>Email</th><th>Created (local)</th><th>Actions</th></tr></thead>
+  <tbody>
+  @foreach (var r in _pending)
+  {
+  <tr>
+    <td>@r.Id</td>
+    <td>@r.Email</td>
+    <td>@r.CreatedUtc.ToLocalTime()</td>
+    <td>
+      <button class="btn" @onclick="() => Approve(r.Id)">Approve</button>
+      <button class="btn" @onclick="() => Deny(r.Id)">Deny</button>
+    </td>
+  </tr>
+  }
+  </tbody>
+</table>
+}
+
+@code{
+string _title="", _url="", _email="";
+bool _isPremium=false;
+
+IEnumerable<MakrisPortfolio.Client.Services.ResourceService.PremiumRequestVm>? _pending;
+
+async Task Create()
+{
+await Http.PostAsJsonAsync("api/admin/resource",
+new MakrisPortfolio.Shared.Models.CreateResourceRequest(_title,_url,_isPremium));
+_title = _url = ""; _isPremium = false;
+}
+
+async Task Grant()
+{
+await Http.PostAsync($"api/admin/grant-premium/{_email}", null);
+_email = "";
+}
+
+protected override async Task OnInitializedAsync() => await Refresh();
+
+private async Task Refresh()
+{
+_pending = await ResourceSvc.GetPendingRequestsAsync();
+StateHasChanged();
+}
+
+private async Task Approve(int id)
+{
+if (await ResourceSvc.ApproveRequestAsync(id))
+await Refresh();
+}
+
+private async Task Deny(int id)
+{
+if (await ResourceSvc.DenyRequestAsync(id))
+await Refresh();
+}
+}

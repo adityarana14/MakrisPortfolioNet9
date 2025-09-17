@@ -1,0 +1,75 @@
+@page "/checkout"
+@inject MakrisPortfolio.Client.Services.ResourceService ResourceSvc
+@inject MakrisPortfolio.Client.Services.AuthService Auth
+@inject NavigationManager Nav
+
+<h2>Premium Access</h2>
+<p style="max-width:70ch">No payment required right now — request access and an admin will approve or deny.</p>
+
+<AuthorizeView>
+  <Authorized>
+    @if (_status is null)
+    {
+      <div class="card" style="max-width:640px">
+        <h4>Request premium access</h4>
+        <textarea @bind="_notes" placeholder="Optional note to admin (context, portfolio link, etc.)"></textarea>
+        <div style="display:flex;gap:.5rem;margin-top:.5rem">
+          <button class="btn primary" @onclick="Request">Send Request</button>
+          <button class="btn" @onclick="Refresh">Refresh Status</button>
+        </div>
+      </div>
+    }
+    else if (_status == "Pending")
+    {
+      <div class="card" style="max-width:640px">
+        <h4>Request sent</h4>
+        <p>Your request is <strong>Pending</strong>. Come back later and click Refresh.</p>
+        <button class="btn" @onclick="Refresh">Refresh Status</button>
+      </div>
+    }
+    else if (_status == "Approved")
+    {
+      <div class="card" style="max-width:640px">
+        <h4>Approved 🎉</h4>
+        <p>You now have premium access.</p>
+        <a class="btn primary" href="/resources">View premium resources</a>
+      </div>
+    }
+    else if (_status == "Denied")
+    {
+      <div class="card" style="max-width:640px">
+        <h4>Denied</h4>
+        <p>Your request was denied by an admin.</p>
+        <button class="btn" @onclick="Refresh">Refresh</button>
+      </div>
+    }
+  </Authorized>
+  <NotAuthorized>
+    <p>You need to be logged in to request premium.</p>
+    <a class="btn primary" href="/login">Log in</a>
+    <a class="btn" href="/register">Register</a>
+  </NotAuthorized>
+</AuthorizeView>
+
+@code {
+  string? _status;
+  string? _notes;
+
+  protected override async Task OnInitializedAsync()
+  {
+    _status = await ResourceSvc.MyPremiumRequestStatusAsync();
+  }
+
+  private async Task Request()
+  {
+    _status = await ResourceSvc.RequestPremiumAsync(_notes);
+  }
+
+  private async Task Refresh()
+  {
+    await Auth.RefreshAsync();
+    _status = await ResourceSvc.MyPremiumRequestStatusAsync();
+    if (_status == "Approved")
+      Nav.NavigateTo("/resources", true);
+  }
+}

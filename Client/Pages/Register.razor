@@ -1,0 +1,14 @@
+@page "/register"
+@inject MakrisPortfolio.Client.Services.AuthService Auth
+@inject NavigationManager Nav
+<h2>Register</h2>
+<form @onsubmit="OnSubmit">
+  <input @bind="_name" placeholder="Display name" />
+  <input @bind="_email" placeholder="Email" />
+  <input type="password" @bind="_password" placeholder="Password" />
+  <button class="btn">Create account</button>
+</form>
+@code{
+  string _email="", _password="", _name="";
+  async Task OnSubmit(){ if(await Auth.RegisterAsync(_email,_password,_name)) Nav.NavigateTo("/"); }
+}

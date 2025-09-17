@@ -1,0 +1,23 @@
+@inherits LayoutComponentBase
+
+<div class="nav">
+    <a class="brand" href="/">CPM</a>
+    <a href="/">Home</a>
+    <a href="/about">About</a>
+    <a href="/services">Services</a>
+    <a href="/resources">Resources</a>
+
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <a href="/admin">Admin</a>
+        </Authorized>
+    </AuthorizeView>
+
+    <span class="spacer"></span>
+    <a href="https://www.linkedin.com/in/christopherpetermakris/" target="_blank" rel="noopener">LinkedIn</a>
+    <LoginDisplay />
+</div>
+
+<div class="container">
+    @Body
+</div>

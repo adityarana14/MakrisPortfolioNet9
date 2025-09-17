@@ -1,0 +1,13 @@
+@page "/login"
+@inject MakrisPortfolio.Client.Services.AuthService Auth
+@inject NavigationManager Nav
+<h2>Login</h2>
+<form @onsubmit="OnSubmit">
+  <input @bind="_email" placeholder="Email" />
+  <input type="password" @bind="_password" placeholder="Password" />
+  <button class="btn">Login</button>
+</form>
+@code{
+  string _email="", _password="";
+  async Task OnSubmit(){ if(await Auth.LoginAsync(_email,_password)) Nav.NavigateTo("/"); }
+}

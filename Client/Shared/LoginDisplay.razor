@@ -1,0 +1,52 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Nav
+@inject MakrisPortfolio.Client.Services.AuthService Auth
+
+<AuthorizeView>
+    <Authorized>
+        <div class="user-menu">
+            <button class="btn" @onclick="Toggle">@DisplayName</button>
+
+            @if (open)
+            {
+                <div class="menu">
+                    <a class="menu-item" href="/resources">My resources</a>
+                    <button class="menu-item danger" @onclick="Logout">Log out</button>
+                </div>
+            }
+        </div>
+    </Authorized>
+
+    <NotAuthorized>
+        <a class="btn" href="/login">Log in</a>
+        <a class="btn primary" href="/register">Register</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    private bool open;
+    private string DisplayName = "Account";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var state = await AuthStateTask;
+        var user = state.User;
+
+        // We issued Name (username/email) on the token; displayName claim may not exist.
+        DisplayName =
+            user.FindFirst("displayName")?.Value ??
+            user.Identity?.Name ??
+            user.FindFirst("email")?.Value ??
+            "Account";
+    }
+
+    private void Toggle() => open = !open;
+
+    private async Task Logout()
+    {
+        await Auth.LogoutAsync();
+        open = false;
+        Nav.NavigateTo("/", forceLoad: false);
+    }
+}

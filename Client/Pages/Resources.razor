@@ -1,0 +1,120 @@
+@page "/resources"
+@inject MakrisPortfolio.Client.Services.ResourceService ResourceSvc
+@inject MakrisPortfolio.Client.Services.AuthService Auth
+@inject NavigationManager Nav
+
+<h1>Resources</h1>
+<p>
+  Public samples below. Premium playbooks include full interview loops, 30/60/90 plans, promotion packets,
+  and executive-ready memo templates.
+</p>
+
+@if (_public is null) { <p>Loading...</p> }
+else
+{
+  <h3>Public</h3>
+  @if (_public!.Any())
+  {
+    <ul>
+      @foreach (var r in _public)
+      {
+        <li><a href="@r.Url" target="_blank">@r.Title</a></li>
+      }
+    </ul>
+  }
+  else { <p>No public resources yet.</p> }
+
+  <h3>Premium</h3>
+  @if (_premiumLoaded && (_premium?.Any() ?? false))
+  {
+    <ul>
+      @foreach (var r in _premium!)
+      {
+        <li><a href="@r.Url" target="_blank">@r.Title</a></li>
+      }
+    </ul>
+    <p style="opacity:.8;font-size:.9rem">You have premium access.</p>
+  }
+  else if (_premiumLoaded)
+  {
+    @if (string.IsNullOrEmpty(_requestStatus) || _requestStatus == "None")
+    {
+      <div class="card" style="max-width:640px">
+        <h4>Request Premium Access</h4>
+        <p>Ask the admin for access. You’ll be notified here once approved.</p>
+        <AuthorizeView>
+          <Authorized>
+            <button class="btn primary" @onclick="OnRequest">Request Access</button>
+          </Authorized>
+          <NotAuthorized>
+            <a class="btn primary" href="/login">Login to request</a>
+            <a class="btn" href="/register">Register</a>
+          </NotAuthorized>
+        </AuthorizeView>
+      </div>
+    }
+    else if (_requestStatus == "Pending")
+    {
+      <div class="card" style="max-width:640px">
+        <h4>Request sent</h4>
+        <p>Your request is <strong>Pending</strong>. When approved, click Refresh Access.</p>
+        <button class="btn" @onclick="OnRefresh">Refresh Access</button>
+      </div>
+    }
+    else if (_requestStatus == "Denied")
+    {
+      <div class="card" style="max-width:640px">
+        <h4>Request denied</h4>
+        <p>Your request was denied. You can contact the admin for details.</p>
+        <button class="btn" @onclick="OnRefresh">Refresh Access</button>
+      </div>
+    }
+  }
+  else { <p>Loading premium…</p> }
+}
+
+@code {
+  IEnumerable<MakrisPortfolio.Shared.Models.ResourceDto>? _public;
+  IEnumerable<MakrisPortfolio.Shared.Models.ResourceDto>? _premium;
+  bool _premiumLoaded = false;
+  string? _requestStatus;
+
+  protected override async Task OnInitializedAsync()
+  {
+    await LoadAll();
+  }
+
+  protected override async Task OnParametersSetAsync()
+  {
+    // If user navigates away and comes back, refresh status again
+    if (_premium is null || !_premium.Any())
+      _requestStatus = await ResourceSvc.MyPremiumRequestStatusAsync();
+  }
+
+  private async Task LoadAll()
+  {
+    _public = await ResourceSvc.GetPublicAsync();
+    try { _premium = await ResourceSvc.GetPremiumAsync(); }
+    catch { _premium = Enumerable.Empty<MakrisPortfolio.Shared.Models.ResourceDto>(); }
+    _premiumLoaded = true;
+
+    if (!_premium.Any())
+    {
+      _requestStatus = await ResourceSvc.MyPremiumRequestStatusAsync();
+    }
+  }
+
+  private async Task OnRequest()
+  {
+    _requestStatus = await ResourceSvc.RequestPremiumAsync();
+    StateHasChanged();
+  }
+
+  private async Task OnRefresh()
+  {
+    await Auth.RefreshAsync(); // get fresh JWT if role changed
+    await LoadAll();
+    if (_premium?.Any() ?? false)
+      Nav.NavigateTo("/resources", true);
+  }
+}
