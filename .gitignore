@@ -1,0 +1,43 @@
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.orig
+.idea/
+.vscode/
+
+# --- .NET / MSBuild ---
+**/bin/
+**/obj/
+**/Debug/
+**/TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# --- Blazor/WebAssembly build artifacts (generated) ---
+# (These live under bin/ anyway, but keep explicit rules to be safe)
+**/wwwroot/_framework/
+**/wwwroot/service-worker-assets.js
+**/wwwroot/*.map
+
+# --- Node (if you ever add tooling) ---
+node_modules/
+
+# --- Logs / dumps ---
+*.log
+*.etl
+*.dmp
+
+# --- Local databases / caches ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Local config & secrets (keep templates instead) ---
+appsettings.*.Local.json
+appsettings.Local.json
+# If your dev appsettings has secrets (e.g., Jwt:Key), ignore it:
+# appsettings.Development.json
